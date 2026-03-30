@@ -4,6 +4,11 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
 DATEN_ORDNER = "arbeitszeiten"
 
 WOCHENTAGE = {
@@ -37,7 +42,7 @@ class ArbeitszeitTracker:
     def __init__(self, root):
         self.root = root
         self.root.title("Arbeitszeit Tracker")
-        self.root.geometry("980x650")
+        self.root.geometry("1120x700")
         self.root.resizable(False, False)
 
         ordner_erstellen()
@@ -68,55 +73,78 @@ class ArbeitszeitTracker:
         tk.Button(
             button_frame,
             text="Einstempeln",
-            width=18,
+            width=16,
             command=self.einstempeln
         ).grid(row=0, column=0, padx=5, pady=5)
 
         tk.Button(
             button_frame,
-            text="Ausstempeln",
-            width=18,
-            command=self.ausstempeln
+            text="Pause starten",
+            width=16,
+            command=self.pause_starten
         ).grid(row=0, column=1, padx=5, pady=5)
 
         tk.Button(
             button_frame,
-            text="Übersicht anzeigen",
-            width=18,
-            command=self.uebersicht_anzeigen
+            text="Pause beenden",
+            width=16,
+            command=self.pause_beenden
         ).grid(row=0, column=2, padx=5, pady=5)
 
         tk.Button(
             button_frame,
-            text="CSV exportieren",
-            width=18,
-            command=self.csv_exportieren
+            text="Ausstempeln",
+            width=16,
+            command=self.ausstempeln
         ).grid(row=0, column=3, padx=5, pady=5)
 
         tk.Button(
             button_frame,
-            text="Monatsstunden",
-            width=18,
-            command=self.monatsstunden_anzeigen
+            text="Übersicht anzeigen",
+            width=16,
+            command=self.uebersicht_anzeigen
         ).grid(row=0, column=4, padx=5, pady=5)
+
+        tk.Button(
+            button_frame,
+            text="Monatsstunden",
+            width=16,
+            command=self.monatsstunden_anzeigen
+        ).grid(row=0, column=5, padx=5, pady=5)
+
+        tk.Button(
+            button_frame,
+            text="CSV exportieren",
+            width=16,
+            command=self.csv_exportieren
+        ).grid(row=1, column=1, padx=5, pady=5)
+
+        tk.Button(
+            button_frame,
+            text="PDF exportieren",
+            width=16,
+            command=self.pdf_exportieren
+        ).grid(row=1, column=2, padx=5, pady=5)
 
         self.tree = ttk.Treeview(
             self.root,
-            columns=("tag", "datum", "ein", "aus", "stunden"),
+            columns=("tag", "datum", "ein", "aus", "pause", "stunden"),
             show="headings",
-            height=20
+            height=22
         )
 
         self.tree.heading("tag", text="Tag")
         self.tree.heading("datum", text="Datum")
         self.tree.heading("ein", text="Einstempeln")
         self.tree.heading("aus", text="Ausstempeln")
-        self.tree.heading("stunden", text="Stunden")
+        self.tree.heading("pause", text="Pause")
+        self.tree.heading("stunden", text="Arbeitsstunden")
 
-        self.tree.column("tag", width=180, anchor="center")
+        self.tree.column("tag", width=160, anchor="center")
         self.tree.column("datum", width=140, anchor="center")
-        self.tree.column("ein", width=180, anchor="center")
-        self.tree.column("aus", width=180, anchor="center")
+        self.tree.column("ein", width=150, anchor="center")
+        self.tree.column("aus", width=150, anchor="center")
+        self.tree.column("pause", width=120, anchor="center")
         self.tree.column("stunden", width=140, anchor="center")
 
         self.tree.pack(pady=15)
@@ -159,8 +187,10 @@ class ArbeitszeitTracker:
         return letzte
 
     def status_aktualisieren(self):
-        if self.letzte_aktion == "EIN":
+        if self.letzte_aktion in ["EIN", "PAUSE_ENDE"]:
             self.status_label.config(text="Status: Eingestempelt", fg="green")
+        elif self.letzte_aktion == "PAUSE_START":
+            self.status_label.config(text="Status: In Pause", fg="orange")
         else:
             self.status_label.config(text="Status: Nicht eingestempelt", fg="red")
 
@@ -179,7 +209,7 @@ class ArbeitszeitTracker:
         self.status_aktualisieren()
 
     def einstempeln(self):
-        if self.letzte_aktion == "EIN":
+        if self.letzte_aktion in ["EIN", "PAUSE_START", "PAUSE_ENDE"]:
             messagebox.showwarning("Warnung", "Du bist schon eingestempelt.")
             return
 
@@ -187,9 +217,27 @@ class ArbeitszeitTracker:
         messagebox.showinfo("Gespeichert", "Einstempeln gespeichert.")
         self.uebersicht_anzeigen()
 
-    def ausstempeln(self):
-        if self.letzte_aktion != "EIN":
+    def pause_starten(self):
+        if self.letzte_aktion not in ["EIN", "PAUSE_ENDE"]:
             messagebox.showwarning("Warnung", "Du musst zuerst einstempeln.")
+            return
+
+        self.eintrag_speichern("PAUSE_START")
+        messagebox.showinfo("Gespeichert", "Pause gestartet.")
+        self.uebersicht_anzeigen()
+
+    def pause_beenden(self):
+        if self.letzte_aktion != "PAUSE_START":
+            messagebox.showwarning("Warnung", "Es läuft gerade keine Pause.")
+            return
+
+        self.eintrag_speichern("PAUSE_ENDE")
+        messagebox.showinfo("Gespeichert", "Pause beendet.")
+        self.uebersicht_anzeigen()
+
+    def ausstempeln(self):
+        if self.letzte_aktion not in ["EIN", "PAUSE_ENDE"]:
+            messagebox.showwarning("Warnung", "Du musst zuerst einstempeln oder die Pause beenden.")
             return
 
         self.eintrag_speichern("AUS")
@@ -198,7 +246,6 @@ class ArbeitszeitTracker:
 
     def daten_laden(self):
         self.aktuelle_datei_aktualisieren()
-
         daten = {}
 
         with open(self.datei, "r", newline="", encoding="utf-8") as f:
@@ -221,12 +268,15 @@ class ArbeitszeitTracker:
         return f"{stunden:02d}:{minuten:02d}"
 
     def tag_auswerten(self, datum, eintraege):
+        eintraege_sortiert = sorted(eintraege, key=lambda x: x[0])
+
         erste_ein = ""
         letzte_aus = ""
-        gesamt_sekunden = 0
-        start_zeit = None
+        arbeits_sekunden = 0
+        pause_sekunden = 0
 
-        eintraege_sortiert = sorted(eintraege, key=lambda x: x[0])
+        arbeits_start = None
+        pause_start = None
 
         for uhrzeit, aktion in eintraege_sortiert:
             zeit_obj = datetime.strptime(datum + " " + uhrzeit, "%Y-%m-%d %H:%M:%S")
@@ -234,15 +284,32 @@ class ArbeitszeitTracker:
             if aktion == "EIN":
                 if erste_ein == "":
                     erste_ein = uhrzeit
-                start_zeit = zeit_obj
+                arbeits_start = zeit_obj
+
+            elif aktion == "PAUSE_START":
+                if arbeits_start is not None:
+                    diff = (zeit_obj - arbeits_start).total_seconds()
+                    if diff > 0:
+                        arbeits_sekunden += diff
+                arbeits_start = None
+                pause_start = zeit_obj
+
+            elif aktion == "PAUSE_ENDE":
+                if pause_start is not None:
+                    diff = (zeit_obj - pause_start).total_seconds()
+                    if diff > 0:
+                        pause_sekunden += diff
+                pause_start = None
+                arbeits_start = zeit_obj
 
             elif aktion == "AUS":
                 letzte_aus = uhrzeit
-                if start_zeit is not None:
-                    diff = (zeit_obj - start_zeit).total_seconds()
+                if arbeits_start is not None:
+                    diff = (zeit_obj - arbeits_start).total_seconds()
                     if diff > 0:
-                        gesamt_sekunden += diff
-                    start_zeit = None
+                        arbeits_sekunden += diff
+                arbeits_start = None
+                pause_start = None
 
         datum_obj = datetime.strptime(datum, "%Y-%m-%d")
         tag_en = datum_obj.strftime("%A")
@@ -254,8 +321,9 @@ class ArbeitszeitTracker:
             "datum": datum_text,
             "erste_ein": erste_ein if erste_ein else "-",
             "letzte_aus": letzte_aus if letzte_aus else "-",
-            "sekunden": int(gesamt_sekunden),
-            "stunden_text": self.sekunden_zu_zeittext(gesamt_sekunden)
+            "pause_text": self.sekunden_zu_zeittext(pause_sekunden),
+            "sekunden": int(arbeits_sekunden),
+            "stunden_text": self.sekunden_zu_zeittext(arbeits_sekunden)
         }
 
     def monatsdaten(self):
@@ -285,6 +353,7 @@ class ArbeitszeitTracker:
                     info["datum"],
                     info["erste_ein"],
                     info["letzte_aus"],
+                    info["pause_text"],
                     info["stunden_text"]
                 )
             )
@@ -321,7 +390,7 @@ class ArbeitszeitTracker:
 
         with open(pfad, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter=";")
-            writer.writerow(["Tag", "Datum", "Einstempeln", "Ausstempeln", "Stunden"])
+            writer.writerow(["Tag", "Datum", "Einstempeln", "Ausstempeln", "Pause", "Arbeitsstunden"])
 
             for info in zeilen:
                 writer.writerow([
@@ -329,13 +398,72 @@ class ArbeitszeitTracker:
                     info["datum"],
                     info["erste_ein"],
                     info["letzte_aus"],
+                    info["pause_text"],
                     info["stunden_text"]
                 ])
 
             writer.writerow([])
-            writer.writerow(["Gesamtstunden", "", "", "", self.sekunden_zu_zeittext(monat_sekunden)])
+            writer.writerow(["Gesamtstunden", "", "", "", "", self.sekunden_zu_zeittext(monat_sekunden)])
 
         messagebox.showinfo("Export fertig", f"CSV gespeichert:\n{pfad}")
+
+    def pdf_exportieren(self):
+        zeilen, monat_sekunden = self.monatsdaten()
+
+        if not zeilen:
+            messagebox.showwarning("Keine Daten", "Für diesen Monat gibt es keine Daten.")
+            return
+
+        aktueller_monat = datetime.now().strftime("%Y-%m")
+        standard_name = f"arbeitszeiten_{aktueller_monat}.pdf"
+
+        pfad = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            initialfile=standard_name,
+            filetypes=[("PDF-Dateien", "*.pdf")]
+        )
+
+        if not pfad:
+            return
+
+        doc = SimpleDocTemplate(pfad, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        titel = Paragraph(f"Arbeitszeiten {aktueller_monat}", styles["Title"])
+        elements.append(titel)
+        elements.append(Spacer(1, 12))
+
+        table_data = [["Tag", "Datum", "Einstempeln", "Ausstempeln", "Pause", "Arbeitsstunden"]]
+
+        for info in zeilen:
+            table_data.append([
+                info["tag"],
+                info["datum"],
+                info["erste_ein"],
+                info["letzte_aus"],
+                info["pause_text"],
+                info["stunden_text"]
+            ])
+
+        table_data.append(["", "", "", "", "Gesamt", self.sekunden_zu_zeittext(monat_sekunden)])
+
+        table = Table(table_data, repeatRows=1)
+
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+
+        messagebox.showinfo("Export fertig", f"PDF gespeichert:\n{pfad}")
 
 
 if __name__ == "__main__":
