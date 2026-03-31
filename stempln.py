@@ -9,7 +9,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-DATEN_ORDNER = "arbeitszeiten"
 
 WOCHENTAGE = {
     "Monday": "Montag",
@@ -22,13 +21,10 @@ WOCHENTAGE = {
 }
 
 
-def ordner_erstellen():
-    os.makedirs(DATEN_ORDNER, exist_ok=True)
-
-
 def aktuelle_monatsdatei():
     jetzt = datetime.now()
-    return os.path.join(DATEN_ORDNER, jetzt.strftime("%Y-%m") + ".csv")
+    dateiname = jetzt.strftime("%Y-%m") + ".csv"
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), dateiname)
 
 
 def datei_fuer_monat_erstellen_wenn_noetig(datei):
@@ -45,7 +41,6 @@ class ArbeitszeitTracker:
         self.root.geometry("1120x700")
         self.root.resizable(False, False)
 
-        ordner_erstellen()
         self.datei = aktuelle_monatsdatei()
         datei_fuer_monat_erstellen_wenn_noetig(self.datei)
 
